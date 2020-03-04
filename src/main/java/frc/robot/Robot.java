@@ -59,11 +59,12 @@ public class Robot extends TimedRobot {
   SpeedControllerGroup left;
   SpeedControllerGroup right;
 
-  Joystick joy1;
-  Joystick joy2;
+  Joystick joy_driver;
+  Joystick joy_help;
 
   // Intake
   SpeedControllerGroup intake;
+  SpeedControllerGroup index;
 
   // Shooter
   SpeedControllerGroup shooter;
@@ -73,9 +74,12 @@ public class Robot extends TimedRobot {
   Solenoid drive_right;
   Solenoid drive_left;
 
-  DoubleSolenoid climb_right = new DoubleSolenoid(2,0,1);
-  DoubleSolenoid climb_left;
-  DoubleSolenoid intakes;
+  //DoubleSolenoid climb_right = new DoubleSolenoid(2,0,1);
+  //DoubleSolenoid climb_left = new DoubleSolenoid(2,0,1/*fill in*/);
+  //DoubleSolenoid intakes = new DoubleSolenoid(2,0,1/*fill in*/);
+
+  Solenoid right_drive = new Solenoid(0);
+  Solenoid left_drive = new Solenoid(1);
 
   NetworkTableEntry tx;
 	NetworkTableEntry ty;
@@ -87,39 +91,42 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void robotInit() {
+    /*
     m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
     m_chooser.addOption("My Auto", kCustomAuto);
-    SmartDashboard.putData("Auto choices", m_chooser);
+    SmartDashboard.putData("Auto choices", m_chooser);*/
 
     CANSparkMax left1 = new CANSparkMax(1, CANSparkMaxLowLevel.MotorType.kBrushless);
     CANSparkMax left2 = new CANSparkMax(2, CANSparkMaxLowLevel.MotorType.kBrushless);
     CANSparkMax left3 = new CANSparkMax(3, CANSparkMaxLowLevel.MotorType.kBrushless);
 
     CANSparkMax right1 = new CANSparkMax(5, CANSparkMaxLowLevel.MotorType.kBrushless);
-    //CANSparkMax right2 = new CANSparkMax(6, CANSparkMaxLowLevel.MotorType.kBrushless);
+    CANSparkMax right2 = new CANSparkMax(4, CANSparkMaxLowLevel.MotorType.kBrushless);
     CANSparkMax right3 = new CANSparkMax(7, CANSparkMaxLowLevel.MotorType.kBrushless);
 
     left = new SpeedControllerGroup(left1, left2, left3);
-    right = new SpeedControllerGroup(right1, /*right2*/ right3);
-
+    right = new SpeedControllerGroup(right1, right2, right3);
     right.setInverted(true);
     
-    //TODO make sure intake is in PWM port 0
+    //The channel part of the intake
     Spark intakePWM1 = new Spark(0);
-
+    //The folding out part of the intke
     Spark intakePWM2 = new Spark(1);
     intakePWM2.setInverted(true);
-    intake = new SpeedControllerGroup(intakePWM1, intakePWM2);
-  
-    Spark shooter1 = new Spark(1);
-    Spark shooter2 = new Spark(2);
+    intake = new SpeedControllerGroup(intakePWM2);
+    index = new SpeedControllerGroup(intakePWM1);
+    
+    //controlls to the shooting mechanism
+    Spark shooter1 = new Spark(2);
+    //Spark shooter2 = new Spark(3);
+    shooter = new SpeedControllerGroup(shooter1);
+    index = new SpeedControllerGroup(intakePWM1);
 
-    shooter = new SpeedControllerGroup(shooter1, shooter2);
+    //The two x-box controllers
+    joy_driver = new Joystick(0);
+    joy_help = new Joystick(1);
 
-
-    joy1 = new Joystick(0);
-    joy2 = new Joystick(1);
-
+    //Limelight fun
     NetworkTable table = NetworkTableInstance.getDefault().getTable("limelight");
 		tx = table.getEntry("tx");
 		ty = table.getEntry("ty");
@@ -164,6 +171,7 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void autonomousPeriodic() {
+    /*
     switch (m_autoSelected) {
       case kCustomAuto:
         // Put custom auto code here
@@ -173,9 +181,11 @@ public class Robot extends TimedRobot {
         // Put default auto code here
         break;
     }
+    */
 
     if(autoTimer.get() < 1){
       left.set(.5);
+      right.set(0);
     }
     else if(autoTimer.get() < 5){
       left.set(1);
@@ -183,13 +193,17 @@ public class Robot extends TimedRobot {
     }
     else if(autoTimer.get() < 6){
       right.set(.5);
+      left.set(0);
     }
     else if(autoTimer.get() < 10){
       shooter.set(1);
       intake.set(1);
+      right.set(0);
+      left.set(0);
     }
     else if(autoTimer.get() < 11){
       right.set(.2);
+      left.set(0);
     }
     else if(autoTimer.get() < 15){
       right.set(1);
@@ -204,25 +218,73 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void teleopPeriodic() {
-    double leftSpeed = -joy1.getRawAxis(3);
+    double leftSpeed = -joy_driver.getRawAxis(1);
     double leftMod = leftSpeed*leftSpeed*leftSpeed;
-    double rightSpeed = -joy1.getRawAxis(5);
+    double rightSpeed = -joy_driver.getRawAxis(5);
     double rightMod = rightSpeed*rightSpeed*rightSpeed;
 
-    if(joy1.getRawButton(3) && m_LimelightHasValidTarget){
+    if(joy_driver.getRawButton(3) && m_LimelightHasValidTarget){
       drive(m_LimelightDriveCommand, m_LimelightSteerCommand);
     }
     else{
       drive(leftMod, rightMod);
     }
 
-    double intakeSpeed = joy1.getRawAxis(6);
+    double intakeSpeed = joy_driver.getRawAxis(2);
+    intake.set(-intakeSpeed);
+    /*Maybe?
+    if(joy_driver.getRawButton(6)){
+      intake.set(1);
+    }*/
+    if (joy_help.getRawButton(6)){
+      index.set(.25);
+    }
+    /*
+    double shooterSpeed = joy_driver.getRawAxis(3);
+    shooter.set(-shooterSpeed);*/
+    double indexSpeed = -1;
+    double shooterSpeed = -.77;
+    if(joy_driver.getRawButton(4)){
+      shooter.set(shooterSpeed);
+      index.set(indexSpeed);
+    }
 
-    intake.set(intakeSpeed);
+    //For shifting the transmition on the robot.
+    if(joy_help.getRawButton(4)){
+      right_drive.set(true);
+      left_drive.set(true);
+    }
+    else{
+      right_drive.set(false);
+      left_drive.set(false);
+    }
 
-    double shooterSpeed =joy1.getRawAxis(/*right trigger*/0);
+    /*
+    //For moving the intake up and down.
+    if(joy_help.getRawButton(6)){
+      intakes.set(DoubleSolenoid.Value.kForward);
+    }
+    else if(joy_help.getRawAxis(3) > .75){
+      intakes.set(DoubleSolenoid.Value.kReverse);
+    }
+    else{
+      intakes.set(DoubleSolenoid.Value.kOff);
+    }
 
-    shooter.set(shooterSpeed);
+
+    //This is for the climber
+    if(joy_help.getRawButton(5)){
+      climb_right.set(DoubleSolenoid.Value.kForward);
+      climb_left.set(DoubleSolenoid.Value.kForward);
+    }
+    else if(joy_help.getRawAxis(2) > .75){
+      climb_right.set(DoubleSolenoid.Value.kReverse);
+      climb_left.set(DoubleSolenoid.Value.kReverse);
+    }
+    else{
+      climb_right.set(DoubleSolenoid.Value.kOff);
+      climb_left.set(DoubleSolenoid.Value.kOff);
+    }*/
   }
   public void Update_Limelight_Tracking()
   {
